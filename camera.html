@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>相機選型計算 — 鑫堡視覺選型平台</title>
+    <meta name="description" content="根據視野尺寸與檢測精度需求，自動計算所需相機解析度並推薦最適合的工業相機型號。">
+    <style>
+        /* 基礎版面與 CSS 變數定義 */
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --dark-bg: #0f172a;
+            --dark-sidebar: #1e293b;
+            --light-bg: #f8fafc;
+            --border-color: #cbd5e1;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 30px 2vw;
+        }
+
+        /* 右側主內容區樣式 (改為透明以露出底色) */
+        .main-content {
+            background: transparent;
+            padding: 0;
+            margin: 0;
+        }
+
+        .main-wrapper {
+            max-width: 1200px;
+            margin: 0 auto;
+
+        }
+
+        /* 響應式排版設定 */
+        .layout-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 預設手機版：攤平左/右欄以允許跨欄排序 */
+        .left-panel,
+        .right-panel {
+            display: contents;
+        }
+
+        #cam-input-card {
+            order: 1;
+        }
+
+        #cam-result-card {
+            order: 2;
+        }
+
+        #cam-recommend-card {
+            order: 3;
+        }
+
+        @media (min-width:800px) {
+            .layout-container {
+                flex-direction: row;
+                flex-wrap: wrap;
+                align-items: stretch;
+            }
+
+            .left-panel,
+            .right-panel {
+                display: flex;
+            }
+
+            .left-panel {
+                flex: 1 1 200px;
+
+                flex-direction: column;
+            }
+
+            .right-panel {
+                flex: 1 1 500px;
+                min-width: 300px;
+                flex-direction: column;
+            }
+
+            #cam-input-card {
+                margin-bottom: 20px;
+                order: unset;
+            }
+
+            #cam-result-card,
+            #cam-recommend-card {
+                order: unset;
+            }
+        }
+
+        /* 卡片設計 */
+        .calculator-card {
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border: 1px solid #ccc;
+            width: 100%;
+            box-sizing: border-box;
+
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #0056b3;
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 10px;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+
+        /* 輸入列排版：標籤與輸入欄位 */
+        .input-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 10px;
+        }
+
+        .input-row label {
+            flex: 1.2;
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+            min-width: 120px;
+        }
+
+        .input-row input {
+            flex: 2;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            min-width: 0;
+        }
+
+        .input-row input:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+        }
+
+        .btn-reset {
+            margin-top: 15px;
+            padding: 10px;
+            width: 100%;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+
+        }
+
+        .btn-reset:hover {
+            background: #5a6268;
+        }
+
+        .btn-reset:active {
+            transform: scale(0.98);
+        }
+
+        /* 新增：反灰與禁用樣式 */
+        .disabled-card {
+            background-color: #f1f5f9 !important;
+            border-color: #cbd5e1 !important;
+            opacity: 0.4;
+            pointer-events: none;
+            user-select: none;
+        }
+
+
+
+        /* 針對不同瀏覽器的 number input 樣式調整，移除上下箭頭 */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+
+        /* 顯示相機資訊的小方塊 */
+        .spec-container {
+            margin-bottom: 20px;
+        }
+
+        .info-box {
+            display: inline-block;
+            vertical-align: top;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #ffffff;
+            text-align: left;
+            font-weight: bold;
+            box-sizing: border-box;
+            font-size: 14px;
+            color: #333;
+
+        }
+
+        .info-box:hover {
+            transform: translateY(-2px);
+        }
+
+        .info-box.highlight-blue {
+            border-left: 4px solid #007bff;
+        }
+
+        .info-box.highlight-green {
+            border-left: 4px solid #28a745;
+        }
+
+        /* 推薦外層區塊樣式 */
+        .recommend-box {
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 0px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .recommended-title {
+            margin-top: 0;
+            color: #0056b3;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+
+        /* 推薦相機標頭與篩選區塊 */
+        .recommend-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #28a745;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .recommend-header h3 {
+            color: #0056b3;
+            font-weight: 700;
+        }
+
+        /* 篩選條件橫排容器 */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .filter-item label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #000000cf;
+            white-space: nowrap;
+        }
+
+        .filter-item select {
+            padding: 5px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #151c28;
+            background-color: #ffffff;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            min-width: 120px;
+        }
+
+        .filter-item select:focus {
+            border-color: #28a745;
+            box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.15);
+        }
+
+        /* 篩選器分隔線 */
+        .filter-divider {
+            width: 1px;
+            height: 20px;
+            background-color: #e2e8f0;
+        }
+
+        /* 推薦相機規格比較表格 */
+        .cam-table {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: separate;
+            border-spacing: 0;
+            text-align: center;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .cam-table th {
+            font-weight: 600;
+            color: #000000;
+            background-color: #f8fafc;
+            padding: 12px 14px;
+            border-bottom: 2px solid #c8ced5;
+            white-space: nowrap;
+        }
+
+        .cam-table th:first-child {
+            border-top-left-radius: 6px;
+            border-bottom-left-radius: 6px;
+        }
+
+        .cam-table th:last-child {
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+
+        /* 設定相機表格欄位寬度 */
+        .cam-table td {
+            padding: 10px;
+            border-bottom: 1px solid #c9c6d4;
+            vertical-align: middle;
+            color: #000000;
+        }
+
+        .cam-table tbody tr {
+            transition: all 0.25s ease;
+        }
+
+        /* 滿足與不滿足需求的視覺分組 */
+        .cam-table tbody tr.suitable {
+            background-color: #ffffff;
+            opacity: 1;
+        }
+
+        .cam-table tbody tr.unsuitable {
+            background-color: #f8fafc;
+            opacity: 0.5;
+            filter: grayscale(100%);
+        }
+
+        .cam-table tbody tr.suitable:hover {
+            background-color: #f0fdf4;
+            /* 淡淡的符合需求綠 */
+        }
+
+        .cam-table tbody tr.unsuitable:hover {
+            opacity: 0.8;
+            filter: none;
+            background-color: #fff1f2;
+            /* 淡淡的解析度不足紅 */
+        }
+
+        /* 最佳首選 row 樣式 */
+        .cam-table tbody tr.best-match {
+            background-color: #f0fdf4 !important;
+            /* 保持淡綠底 */
+        }
+
+        .cam-table tbody tr.best-match td {
+            border-top: 1px solid #22c55e;
+            border-bottom: 1px solid #22c55e;
+            font-weight: 500;
+        }
+
+        .cam-table tbody tr.best-match td:first-child {
+            border-left: 4px solid #22c55e;
+            border-top-left-radius: 6px;
+            border-bottom-left-radius: 6px;
+        }
+
+        .cam-table tbody tr.best-match td:last-child {
+            border-right: 1px solid #22c55e;
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+
+        /* 最佳首選徽章 (帶呼吸動畫) */
+        .badge-best-match {
+            display: inline-flex;
+            align-items: center;
+            background-color: #22c55e;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 8px;
+            vertical-align: middle;
+            box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2);
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+            }
+        }
+
+        /* 狀態標籤 (Chips) */
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            gap: 6px;
+        }
+
+        .status-chip .chip-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .chip-suitable {
+            background-color: #dcfce7;
+            color: #15803d;
+        }
+
+        .chip-suitable .chip-dot {
+            background-color: #22c55e;
+            box-shadow: 0 0 6px #22c55e;
+        }
+
+        .chip-unsuitable {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .chip-unsuitable .chip-dot {
+            background-color: #ef4444;
+        }
+
+        /* 懸浮規格詳情 Tooltip */
+        .cam-model-cell {
+            position: relative;
+            cursor: help;
+        }
+
+        .hover-spec-tooltip {
+            display: none;
+            position: absolute;
+            left: 105%;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(8px);
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            padding: 14px 16px;
+            width: 240px;
+            z-index: 99999;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .hover-spec-tooltip::before {
+            content: '';
+            position: absolute;
+            top: var(--arrow-top, 50%);
+            left: var(--arrow-left, auto);
+            right: var(--arrow-right, 100%);
+            transform: var(--arrow-transform, translateY(-50%));
+            border-width: 6px;
+            border-style: solid;
+            border-color: var(--arrow-border-color, transparent #ffffff transparent transparent);
+        }
+
+        /* 手機版氣泡框滿版/底部顯示 */
+        @media (max-width: 600px) {
+            .hover-spec-tooltip {
+                position: fixed !important;
+                left: 10px !important;
+                right: 10px !important;
+                bottom: 20px !important;
+                top: auto !important;
+                width: calc(100% - 20px) !important;
+                transform: none !important;
+                z-index: 10000 !important;
+                box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15) !important;
+            }
+
+            .hover-spec-tooltip::before {
+                display: none !important;
+            }
+        }
+
+        .cam-model-cell:hover .hover-spec-tooltip {
+            display: block;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /*規格表內容*/
+        .tooltip-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+        }
+
+        .tooltip-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .tooltip-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .tooltip-item .label {
+            color: #1e293b;
+            font-weight: 500;
+        }
+
+        .tooltip-item .value {
+            color: #1e293b;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        /* 連結按鈕 (CTA) */
+        .btn-cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            margin-left: 4px;
+            border: 1px solid transparent;
+            outline: none;
+        }
+
+        .btn-pdf {
+            background-color: #f1f5f9;
+            color: #475569;
+            border-color: #cbd5e1;
+        }
+
+        .btn-pdf:hover {
+            background-color: #e2e8f0;
+            color: #0f172a;
+            border-color: #94a3b8;
+        }
+
+        .btn-contact {
+            background-color: #3b82f6;
+            color: #ffffff;
+        }
+
+        .btn-contact:visited,
+        .btn-contact:active {
+            color: #ffffff;
+        }
+
+        .btn-contact:hover {
+            background-color: #2563eb;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+        }
+
+        /* 列表容器溢出處理 */
+        #standard-cam-list {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        /* 問號圖示tooltip基礎設定 */
+        .tooltip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: help;
+            color: #ff0000;
+            transition: all 0.3s ease;
+            vertical-align: middle;
+        }
+
+        .tooltip:hover {
+            color: #ff0000;
+            transform: scale(1.1);
+            z-index: 99999;
+        }
+
+        /* 氣泡框樣式 */
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 320px;
+            background-color: #f1f1f1;
+            color: #000000;
+            text-align: left;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #000000;
+            font-size: 13px;
+            box-shadow: 0 4px 10px rgb(99, 98, 98);
+            position: absolute;
+            z-index: 99999;
+            bottom: 150%;
+            left: 50%;
+            margin-left: -110px;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            transform: translateY(5px);
+            font-weight: normal;
+        }
+
+        .tooltip .tooltiptext ol {
+            text-align: left;
+            list-style-position: outside;
+            list-style-type: decimal;
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        .tooltip .tooltiptext ul {
+            text-align: left;
+            list-style-position: outside;
+            list-style-type: circle;
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        .tooltip .tooltiptext li {
+            margin-bottom: 5px;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 右側主內容區 -->
+    <div class="layout-container">
+
+        <div class="left-panel">
+            <div class="calculator-card" id="cam-input-card">
+                <h3>相機拍攝需求輸入
+                    <span class="tooltip">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span class="tooltiptext">
+                            <ul>
+                                <li style="line-height: 1.6; margin-bottom: 8px;">
+                                    <strong>拍攝範圍 W × H：</strong>指相機實際需要涵蓋的物件尺寸（長 × 寬），單位為 mm。
+                                </li>
+                                <li style="line-height: 1.6; margin-bottom: 8px;">
+                                    <strong>最小檢測精度：</strong>需要能辨識的最小瑕疵或特徵尺寸，單位為 mm。
+                                </li>
+                                <li style="line-height: 1.6;">
+                                    <strong>單個特徵所需像素：</strong>每個最小特徵應佔幾個像素，建議 5 以上，數值越高精度越可靠。
+                                </li>
+                            </ul>
+                        </span>
+                    </span>
+                </h3>
+                <div class="input-row">
+                    <label for="cam-fov-w">拍攝範圍 長度 W (mm)</label>
+                    <input type="number" id="cam-fov-w" oninput="calculateCameraRes()">
+                </div>
+
+                <div class="input-row">
+                    <label for="cam-fov-h">拍攝範圍 寬度 H (mm)</label>
+                    <input type="number" id="cam-fov-h" oninput="calculateCameraRes()">
+                </div>
+                <div id="fov-h-warning"
+                    style="display:none; color:#ff0000; font-size:12px; margin-top:-10px; margin-bottom:10px; padding-left:36%;">
+                    ⚠ 寬度 H 不可大於長度 W
+                </div>
+
+                <div class="input-row">
+                    <label for="cam-precision">最小檢測精度 (mm)</label>
+                    <input type="number" id="cam-precision" step="0.001" oninput="calculateCameraRes()">
+                </div>
+                <div class="input-row-wrapper">
+                    <div class="input-row">
+                        <label for="cam-pixels-per-feature">單個特徵所需像素</label>
+                        <input type="number" id="cam-pixels-per-feature" value="6" oninput="calculateCameraRes()"
+                            onblur="if(this.value < 5 || this.value === '') this.value = 5; calculateCameraRes();">
+                    </div>
+                    <div
+                        style="color: #ff0000; font-size: 12px; margin-top: -10px; margin-bottom: 16px; padding-left: 36%;">
+                        * 提示：最低 5 像素，越高精度越好。
+                    </div>
+                </div>
+                <button class="btn-reset" onclick="resetCameraForm()">重置數值</button>
+            </div>
+
+            <div class="calculator-card" id="cam-result-card" style="border: 1px solid #007bff;">
+                <h3>解析度計算結果
+                    <span class="tooltip">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span class="tooltiptext">
+                            <ul>
+                                <li style="line-height: 1.6; margin-bottom: 8px;">
+                                    <strong>空間解析度：</strong>每個像素對應的實際物理尺寸（mm/pixel），由最小精度除以每特徵像素數計算得出。
+                                </li>
+                                <li style="line-height: 1.6;">
+                                    <strong>所需解析度：</strong>根據拍攝範圍與空間解析度計算出相機至少需要的像素數（長 × 寬 px）。
+                                </li>
+                            </ul>
+                        </span>
+                    </span>
+                </h3>
+                <div class="spec-container" style="margin-bottom: 0;">
+                    <div class="info-box highlight-blue">空間解析度：<span id="res-pixel-precision">-</span> mm/pixel
+                    </div>
+                    <div class="info-box highlight-blue">所需解析度：長 <span id="res-width-pixels">-</span> x 寬 <span
+                            id="res-height-pixels-calc">-</span> px</div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="calculator-card" id="cam-recommend-card" style="border: 1px solid #28a745; position: relative;">
+                <div class="recommend-header">
+                    <h3 style="border-bottom: none; padding-bottom: 0; margin-bottom: 0; display: inline-block;">推薦相機
+                        <span class="tooltip">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <span class="tooltiptext">
+                                <ul>
+                                    <li style="line-height: 1.6; margin-bottom: 8px;">
+                                        <strong>最佳首選：</strong>在所有符合條件的相機中，MP 最低（解析度剛好夠用）者，會標示為「最佳首選」。
+                                    </li>
+                                    <li style="line-height: 1.6;">
+                                        <strong>篩選器：</strong>可依解析度範圍、傳輸介面、FPS、曝光方式進行多條件篩選。
+                                    </li>
+                                </ul>
+                            </span>
+                        </span>
+                    </h3>
+                    <div class="filter-bar">
+                        <!-- 解析度篩選 -->
+                        <div class="filter-item">
+                            <label for="filter-mp">解析度：</label>
+                            <select id="filter-mp" onchange="calculateCameraRes()">
+                                <option value="all">全部解析度</option>
+                                <option value="lt1.3">1.3 MP 以下</option>
+                                <option value="1.3to5">1.3 ~ 5 MP</option>
+                                <option value="5to12">5 ~ 12 MP</option>
+                                <option value="12to20">12 ~ 20 MP</option>
+                                <option value="gt20">20 MP 以上</option>
+                            </select>
+                        </div>
+                        <div class="filter-divider"></div>
+                        <!-- 傳輸介面篩選 -->
+                        <div class="filter-item">
+                            <label for="filter-interface">傳輸介面：</label>
+                            <select id="filter-interface" onchange="calculateCameraRes()">
+                                <option value="all">全部介面</option>
+                                <option value="GigE">GigE</option>
+                                <option value="USB 3.0">USB 3.0</option>
+                                <option value="CoaXPress">CoaXPress</option>
+                                <option value="Camera Link">Camera Link</option>
+                            </select>
+                        </div>
+                        <div class="filter-divider"></div>
+                        <!-- 影格率篩選 -->
+                        <div class="filter-item">
+                            <label for="filter-fps">影格率：</label>
+                            <select id="filter-fps" onchange="calculateCameraRes()">
+                                <option value="all">全部 FPS</option>
+                                <option value="lt30">30 FPS 以下</option>
+                                <option value="30to60">30 ~ 60 FPS</option>
+                                <option value="60to120">60 ~ 120 FPS</option>
+                                <option value="gt120">120 FPS 以上</option>
+                            </select>
+                        </div>
+                        <div class="filter-divider"></div>
+                        <!-- 曝光方式篩選 -->
+                        <div class="filter-item">
+                            <label for="filter-shutter">曝光方式：</label>
+                            <select id="filter-shutter" onchange="calculateCameraRes()">
+                                <option value="all">全部曝光</option>
+                                <option value="Global">全局快門</option>
+                                <option value="Rolling">滾動快門</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="recommend-box">
+                    <div id="standard-cam-list">
+                        <!-- 動態載入相機列表 (表格) -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // 1. 讀取Google Excel 試算表設定基準
+        const spreadsheetId = '1Enn6Yr6bOtlpWUSoy_Hd00VKWQh-0m4x';
+        const sheet1Name = 'GigE';
+        const sheet2Name = 'USB3';
+
+        // 2. 用於儲存合併後資料的容器
+        let standardCams = [];
+        let fetchedCams = [];
+        let loadedSheetsCount = 0;
+        let isDataLoaded = false;
+
+        // 3. 動態發送 JSONP 請求的函式
+        function requestSheetData(sheetName, callbackName) {
+            const encodedSheetName = encodeURIComponent(sheetName);
+            const jsonpUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?sheet=${encodedSheetName}&tqx=responseHandler:${callbackName}`;
+            const script = document.createElement('script');
+            script.src = jsonpUrl;
+            document.body.appendChild(script);
+        }
+
+        // 4. 網頁載入完成後，同時去抓取兩個分頁
+        window.onload = function () {
+            // 顯示載入中動畫
+            const listEl = document.getElementById('standard-cam-list');
+            if (listEl) {
+                listEl.innerHTML = `
+                    <div style="text-align:center; padding:30px; color:#666; font-size: 14px;">
+                        <style>
+                            @keyframes spin { to { transform: rotate(360deg); } }
+                        </style>
+                        <div style="display:inline-block; width:20px; height:20px; border:3px solid #ccc; border-top-color:#3b82f6; border-radius:50%; animation:spin 1s linear infinite; margin-right:10px; vertical-align:middle;"></div>
+                        正在讀取雙分頁雲端相機資料，請稍候...
+                    </div>`;
+            }
+            requestSheetData(sheet1Name, 'handleSheet1');
+            requestSheetData(sheet2Name, 'handleSheet2');
+        };
+
+        // 5. 處理分頁資料的核心邏輯 (包含動態欄位辨識與 USB3 欄位位移校正)
+        function processRows(responseTable, isUSB3) {
+            if (!responseTable || !responseTable.rows || responseTable.rows.length === 0) return;
+
+            const cols = responseTable.cols;
+            const rows = responseTable.rows;
+
+            // 動態找出所需欄位的索引
+            let idx = {
+                name: -1,
+                pixels: -1,
+                color: -1,
+                sensorType: -1,
+                sensorName: -1,
+                pixelSize: -1,
+                sensorSize: -1,
+                shuttertype: -1,
+                resolution: -1,
+                fps: -1,
+                dataInterface: -1,
+                maximumGain: -1, // 用於 USB3 靶面尺寸備用
+                ShopLink: -1,
+            };
+
+            // 輔助函式：比對標題 label
+            function matchHeader(label, targetText) {
+                if (!label) return false;
+                return label.trim().replace(/\s+/g, ' ').includes(targetText);
+            }
+
+            // EXCEL 標題列辨識
+            function detectCols(labels) {
+                labels.forEach((label, i) => {
+                    const l = label ? String(label).trim() : '';
+
+                    if (idx.name === -1 && (matchHeader(l, '公司型號') || l === 'Name') && !matchHeader(l, '原廠型號')) idx.name = i;
+                    if (idx.pixels === -1 && (matchHeader(l, '畫素') || matchHeader(l, 'Pixels'))) idx.pixels = i;
+                    if (idx.color === -1 && (matchHeader(l, '黑白/彩色') || matchHeader(l, 'Color'))) idx.color = i;
+                    if (idx.sensorType === -1 && (matchHeader(l, '感測器類型') || matchHeader(l, 'Sensor Type'))) idx.sensorType = i;
+                    if (idx.sensorName === -1 && (matchHeader(l, '感測器型號') || matchHeader(l, 'Sensor Name'))) idx.sensorName = i;
+                    if (idx.pixelSize === -1 && (matchHeader(l, '像元尺寸') || matchHeader(l, 'Pixel Size'))) idx.pixelSize = i;
+                    if (idx.sensorSize === -1 && (matchHeader(l, '感測器尺寸') || matchHeader(l, 'Sensor Size'))) idx.sensorSize = i;
+                    if (idx.shuttertype === -1 && (matchHeader(l, '曝光方式') || matchHeader(l, 'Shutter Type'))) idx.shuttertype = i;
+                    if (idx.resolution === -1 && (matchHeader(l, '解析度') || matchHeader(l, 'Resolution'))) idx.resolution = i;
+                    if (idx.fps === -1 && (matchHeader(l, '偵率') || matchHeader(l, 'FPS'))) idx.fps = i;
+                    if (idx.dataInterface === -1 && (matchHeader(l, '資料介面') || matchHeader(l, 'DataInterface'))) idx.dataInterface = i;
+                    if (idx.maximumGain === -1 && (matchHeader(l, '最大增益') || matchHeader(l, 'MaximumGain'))) idx.maximumGain = i;
+                    if (idx.ShopLink === -1 && (matchHeader(l, '購物連結') || matchHeader(l, 'Shop Link'))) idx.ShopLink = i;
+                });
+            }
+
+            // 優先從 cols 取標題
+            if (cols && cols.length > 0) detectCols(cols.map(c => c ? c.label : ''));
+            // 備用：從第一資料列取標題
+            if (rows[0] && rows[0].c) detectCols(rows[0].c.map(c => c && c.v != null ? String(c.v) : ''));
+
+            // 取得欄位資料
+            function getVal(row, i) {
+                return (row && row.c && i !== -1 && row.c[i] && row.c[i].v != null) ? row.c[i].v : '';
+            }
+
+            // 遍歷每一列資料並解析
+            rows.forEach(function (row) {
+                if (!row || !row.c) return;
+
+                const nameVal = String(getVal(row, idx.name)).trim();
+                const resVal = String(getVal(row, idx.resolution)).trim();
+
+                // 過濾掉表頭列自己
+                if (nameVal === '公司型號' || nameVal === 'Name' || nameVal === '' || resVal === '解析度' || resVal === 'Resolution' || resVal === '') {
+                    return;
+                }
+
+                // 解析寬與高像素數 (例如 "1280X960" 或 "1280*960")
+                const resParts = resVal.toUpperCase().split(/X|\*/);
+                if (resParts.length < 2) return; // 無效解析度跳過
+                const resW = parseInt(resParts[0].trim(), 10);
+                const resH = parseInt(resParts[1].trim(), 10);
+                if (isNaN(resW) || isNaN(resH)) return;
+
+                // 解析像元尺寸 (支援 "7.4*7.4μm" 或 "3.45μm" 格式)
+                const rawPixelSize = String(getVal(row, idx.pixelSize));
+                const pMatch = rawPixelSize.match(/([0-9.]+)\s*[*xX]\s*([0-9.]+)/);
+                let pixelSizeW = 0.0;
+                let pixelSizeH = 0.0;
+                if (pMatch) {
+                    pixelSizeW = parseFloat(pMatch[1]);
+                    pixelSizeH = parseFloat(pMatch[2]);
+                } else {
+                    const singleMatch = rawPixelSize.match(/([0-9.]+)/);
+                    const size = singleMatch ? parseFloat(singleMatch[1]) : 0.0;
+                    pixelSizeW = size;
+                    pixelSizeH = size;
+                }
+
+                // 解析靶面尺寸 Sensor Size (針對 USB3 做欄位位移校正)
+                let sizeVal = '';
+                if (isUSB3) {
+                    sizeVal = String(getVal(row, idx.maximumGain)).trim();
+                    if (!sizeVal || sizeVal === '' || !sizeVal.includes('"')) {
+                        sizeVal = String(getVal(row, idx.sensorSize)).trim();
+                    }
+                } else {
+                    sizeVal = String(getVal(row, idx.sensorSize)).trim();
+                }
+
+                // 畫素 Megapixel (mp)
+                const mp = (resW * resH) / 1000000;
+
+                // 感測器晶片 (Sensor Name + Type)
+                const sName = String(getVal(row, idx.sensorName)).trim();
+                const sType = String(getVal(row, idx.sensorType)).trim();
+                const sensorType = sName ? `${sName} (${sType})` : sType;
+
+                // 傳輸介面
+                const interfaceVal = isUSB3 ? 'USB 3.0' : 'GigE';
+
+                // 影格率 (FPS)
+                const fps = parseFloat(getVal(row, idx.fps)) || 0;
+
+                // 黑白/彩色
+                const color = String(getVal(row, idx.color)).trim();
+
+                // 曝光方式
+                const shuttertype = String(getVal(row, idx.shuttertype)).trim();
+
+                // 購物連結
+                const shoplink = String(getVal(row, idx.ShopLink)).trim();
+
+                fetchedCams.push({
+                    name: nameVal,
+                    resW: resW,
+                    resH: resH,
+                    pixelSize: pixelSizeW,
+                    pixelSizeW: pixelSizeW,
+                    pixelSizeH: pixelSizeH,
+                    size: sizeVal,
+                    mp: mp,
+                    sensorType: sensorType,
+                    interface: interfaceVal,
+                    fps: fps,
+                    color: color,
+                    shuttertype: shuttertype,
+                    shoplink: shoplink,
+                });
+            });
+        }
+
+        // 6. 檢查是否兩個分頁都載入完畢，並渲染到選型清單
+        function checkAndRender() {
+            loadedSheetsCount++;
+            if (loadedSheetsCount === 2) {
+                isDataLoaded = true;
+                standardCams = fetchedCams;
+
+                // 依據畫素大小進行預設排序，相同 MP 時 GigE 優先於 USB
+                standardCams.sort((a, b) => {
+                    if (a.mp !== b.mp) return a.mp - b.mp;
+                    const ifacePriority = iface => (iface || '').toLowerCase().includes('gige') ? 0 : 1;
+                    return ifacePriority(a.interface) - ifacePriority(b.interface);
+                });
+
+                // 執行選型計算與呈現
+                calculateCameraRes();
+            }
+        }
+
+        // 7. 分頁 1 (GigE) 回傳處理
+        function handleSheet1(response) {
+            try {
+                processRows(response.table, false);
+            } catch (e) { console.error('分頁 GigE 解析失敗', e); }
+            checkAndRender();
+        }
+
+        // 8. 分頁 2 (USB3) 回傳處理
+        function handleSheet2(response) {
+            try {
+                processRows(response.table, true);
+            } catch (e) { console.error('分頁 USB3 解析失敗', e); }
+            checkAndRender();
+        }
+
+        // ----------------------------------------------------
+        // 模組 1：相機選型計算
+        // ----------------------------------------------------
+        function calculateCameraRes() {
+            if (!isDataLoaded) return; // 資料尚未載入時，直接返回由 checkAndRender 觸發
+
+            const fovW = parseFloat(document.getElementById('cam-fov-w').value) || 0;
+            const fovH = parseFloat(document.getElementById('cam-fov-h').value) || 0;
+            const precision = parseFloat(document.getElementById('cam-precision').value) || 0;
+            const pixelsPerFeature = parseFloat(document.getElementById('cam-pixels-per-feature').value) || 1;
+
+            let reqW = 0;
+            let reqH = 0;
+            let isInputValid = true;
+
+            // 取得推薦相機的卡片元素
+            const recommendCard = document.getElementById('cam-recommend-card');
+
+            const warningEl = document.getElementById('fov-h-warning');
+            // 寬度不可大於長度的檢查
+            const isHgtW = fovW > 0 && fovH > 0 && fovH > fovW;
+            if (warningEl) warningEl.style.display = isHgtW ? 'block' : 'none';
+            if (fovW <= 0 || fovH <= 0 || precision <= 0 || pixelsPerFeature <= 0 || isHgtW) {
+                document.getElementById('res-pixel-precision').innerText = '-';
+                document.getElementById('res-width-pixels').innerText = '-';
+                document.getElementById('res-height-pixels-calc').innerText = '-';
+                isInputValid = false;
+
+                // 未輸入完整或數值非法時，加入反灰樣式
+                if (recommendCard) {
+                    recommendCard.classList.add('disabled-card');
+                }
+            } else {
+                // 像素精度 = 最小精度 / 每特徵像素數
+                const pixelPrecision = precision / pixelsPerFeature;
+                document.getElementById('res-pixel-precision').innerText = pixelPrecision.toFixed(4);
+
+                // 所需像素 (長與寬)
+                reqW = Math.ceil(fovW / pixelPrecision);
+                reqH = Math.ceil(fovH / pixelPrecision);
+                document.getElementById('res-width-pixels').innerText = reqW;
+                document.getElementById('res-height-pixels-calc').innerText = reqH;
+
+                // 數值輸入完整且合法時，移除反灰樣式
+                if (recommendCard) {
+                    recommendCard.classList.remove('disabled-card');
+                }
+            }
+
+            const listEl = document.getElementById('standard-cam-list');
+            listEl.innerHTML = '';
+
+            let match = null;
+            if (isInputValid) {
+                // 找出原始列表中最小符合需求者
+                match = standardCams.find(c => c.resW >= reqW && c.resH >= reqH);
+                if (!match) {
+                    match = {
+                        name: '解析度自定義相機',
+                        resW: reqW,
+                        resH: reqH,
+                        pixelSize: "來電詢問",
+                        pixelSizeW: 0,
+                        pixelSizeH: 0,
+                        size: "來電詢問",
+                        mp: (reqW * reqH / 1000000),
+                        sensorType: "來電詢問",
+                        interface: "來電詢問",
+                        fps: 0,
+                        color: "來電詢問",
+                        shuttertype: "來電詢問",
+                        shoplink: "https://shop.cetus.tw/",
+                    };
+                }
+            }
+
+
+
+            // 讀取三個篩選條件
+            const filterMp = document.getElementById('filter-mp').value;
+            const filterInterface = document.getElementById('filter-interface').value;
+            const filterFps = document.getElementById('filter-fps').value;
+            const filterShutter = document.getElementById('filter-shutter').value;
+
+            // 複製並套用排序（預設由低到高 MP）
+            let displayCams = [...standardCams];
+
+            // 如果最佳首選是自定義相機，加入顯示列表頂部
+            if (match && match.name === '解析度自定義相機') {
+                displayCams.unshift(match);
+            }
+
+            // 篩選邏輯：同時符合所有條件
+            displayCams = displayCams.filter(c => {
+                // 條件 1：解析度需求篩選（符合輸入需求或是自定義相機）
+                const meetsResReq = !isInputValid || (c.resW >= reqW && c.resH >= reqH) || c.name === '解析度自定義相機';
+                if (!meetsResReq) return false;
+
+                // 條件 2：MP 範圍篩選
+                if (filterMp !== 'all') {
+                    const mp = c.mp;
+                    if (filterMp === 'lt1.3' && !(mp < 1.3)) return false;
+                    if (filterMp === '1.3to5' && !(mp >= 1.3 && mp < 5)) return false;
+                    if (filterMp === '5to12' && !(mp >= 5 && mp < 12)) return false;
+                    if (filterMp === '12to20' && !(mp >= 12 && mp < 20)) return false;
+                    if (filterMp === 'gt20' && !(mp >= 20)) return false;
+                }
+
+                // 條件 3：傳輸介面篩選
+                if (filterInterface !== 'all') {
+                    const iface = (c.interface || '').toLowerCase();
+                    if (!iface.includes(filterInterface.toLowerCase())) return false;
+                }
+
+                // 條件 4：影格率範圍篩選
+                if (filterFps !== 'all') {
+                    const fps = c.fps || 0;
+                    if (filterFps === 'lt30' && !(fps > 0 && fps < 30)) return false;
+                    if (filterFps === '30to60' && !(fps >= 30 && fps < 60)) return false;
+                    if (filterFps === '60to120' && !(fps >= 60 && fps < 120)) return false;
+                    if (filterFps === 'gt120' && !(fps >= 120)) return false;
+                }
+                // 條件 5：曝光方式篩選（同時支援中文與英文資料欄位值）
+                if (filterShutter !== 'all') {
+                    const shutter = (c.shuttertype || '').toLowerCase();
+                    const aliases = {
+                        'global': ['global', '全局'],
+                        'rolling': ['rolling', '滾動']
+                    };
+                    const key = filterShutter.toLowerCase();
+                    const candidates = aliases[key] || [key];
+                    if (!candidates.some(a => shutter.includes(a))) return false;
+                }
+
+                return true;
+            });
+
+            // 截取前 10 筆
+            displayCams = displayCams.slice(0, 10);
+
+            // 篩選後重新從顯示清單中找最佳首選（解析度符合且 MP 最小者）
+            let bestMatch = null;
+            if (isInputValid) {
+                const suitableInDisplay = displayCams.filter(c =>
+                    (c.resW >= reqW && c.resH >= reqH) || c.name === '解析度自定義相機'
+                );
+                if (suitableInDisplay.length > 0) {
+                    // 相同 MP 時，GigE 優先於 USB
+                    const ifacePriority = iface => (iface || '').toLowerCase().includes('gige') ? 0 : 1;
+                    bestMatch = suitableInDisplay.reduce((prev, cur) => {
+                        if (cur.mp < prev.mp) return cur;
+                        if (cur.mp === prev.mp && ifacePriority(cur.interface) < ifacePriority(prev.interface)) return cur;
+                        return prev;
+                    });
+                }
+            }
+
+            // 相機表格寬度
+            let tableHtml = `
+                <table class="cam-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align: center; width: 130px;">相機型號</th>
+                            <th style="text-align: center; width: 70px;">解析度</th>
+                            <th style="text-align: center; width: 60px;">靶面尺寸</th>
+                            <th style="text-align: center; width: 60px;">傳輸介面</th>
+                            <th style="text-align: center; width: 80px;">最大影格率</th>
+                            <th style="text-align: center; width: 80px;">狀態</th>
+                            <th style="text-align: center; width: 50px;">連結</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            //秀出相機資料
+            displayCams.forEach(c => {
+                const isSuitable = !isInputValid || (c.resW >= reqW && c.resH >= reqH);
+                const isBestMatch = bestMatch ? (c.name === bestMatch.name) : false;
+                const suitabilityClass = isSuitable ? 'suitable' : 'unsuitable';
+                const bestMatchClass = isBestMatch ? 'best-match' : '';
+
+                // Badge
+                const statusBadge = isSuitable
+                    ? `<span class="status-chip chip-suitable"><span class="chip-dot"></span>符合需求</span>`
+                    : `<span class="status-chip chip-unsuitable"><span class="chip-dot"></span>解析度不足</span>`;
+
+                // Best match badge
+                const bestMatchBadge = isBestMatch ? `<span class="badge-best-match">🏆 最佳首選</span>` : '';
+
+                // 解析度與影格率字串
+                const resolutionText = `${c.resW} x ${c.resH} `;
+                const fpsText = c.fps ? `${c.fps} FPS` : '-';
+                //詳細資訊
+                tableHtml += `
+                    <tr class="${suitabilityClass} ${bestMatchClass}">
+                        <td class="cam-model-cell">
+                            <strong>${c.name}</strong>${bestMatchBadge}
+                            <div class="hover-spec-tooltip">
+                                <div class="tooltip-title">${c.name} 詳細規格</div>
+                                <div class="tooltip-grid">
+                                    <div class="tooltip-item">
+                                        <span class="label">感測器晶片：</span>
+                                        <span class="value">${c.sensorType || '-'}</span>
+                                    </div>
+                                    <div class="tooltip-item">
+                                        <span class="label">解析度：</span>
+                                        <span class="value">${c.resW} x ${c.resH} (${c.mp.toFixed(2)} MP)</span>
+                                    </div>
+                                    <div class="tooltip-item">
+                                        <span class="label">像素尺寸：</span>
+                                        <span class="value">${c.pixelSizeW && c.pixelSizeH ? c.pixelSizeW.toFixed(2) + ' x ' + c.pixelSizeH.toFixed(2) + ' µm' : '-'}</span>
+                                    </div>
+                                    <div class="tooltip-item">
+                                        <span class="label">傳感器尺寸：</span>
+                                        <span class="value">${c.size || '-'}</span>
+                                    </div>
+                                    <div class="tooltip-item">
+                                        <span class="label">傳輸介面：</span>
+                                        <span class="value">${c.interface || '-'}</span>
+                                    </div>
+                                    <div class="tooltip-item">
+                                        <span class="label">黑白/彩色：</span>
+                                        <span class="value">${c.color || '-'}</span>
+                                    </div>
+                                    <div class="tooltip-item">
+                                        <span class="label">曝光方式：</span>
+                                        <span class="value">${c.shuttertype || '-'}</span>
+                                    </div>
+                                    <div class="tooltip-item">
+                                        <span class="label">最大影格率：</span>
+                                        <span class="value">${fpsText}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td style="text-align">${resolutionText}</td>
+                        <td style="text-align">${c.size || '-'}</td>
+                        <td style="text-align">${c.interface || '-'}</td>
+                        <td style="text-align">${fpsText}</td>
+                        <td style="text-align">${statusBadge}</td>
+                        <td style="text-align white-space: nowrap;">
+                          <!-- 隱藏規格書按鈕 <button class="btn-cta btn-pdf" onclick="viewSpec('${c.name}')" title="查看規格書 (PDF)">規格書</button>-->
+                            ${c.shoplink
+                        ? `<a class="btn-cta btn-contact" href="${c.shoplink}" target="_blank" rel="noopener noreferrer" title="前往購物連結">詢價</a>`
+                        : `<button class="btn-cta btn-contact" onclick="contactUs('${c.name}')" title="詢價 (Contact Us)">詢價</button>`
+                    }
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `
+                    </tbody>
+                </table>
+            `;
+            listEl.innerHTML = tableHtml;
+        }
+
+        // 重製後數值
+        function resetCameraForm() {
+            document.getElementById('cam-fov-w').value = '';
+            document.getElementById('cam-fov-h').value = '';
+            document.getElementById('cam-precision').value = '';
+            document.getElementById('cam-pixels-per-feature').value = 5;
+            // 重置4個篩選選單
+            document.getElementById('filter-mp').value = 'all';
+            document.getElementById('filter-interface').value = 'all';
+            document.getElementById('filter-fps').value = 'all';
+            document.getElementById('filter-shutter').value = 'all';
+
+
+            calculateCameraRes();
+        }
+
+        // 模擬規格書點擊事件
+        function viewSpec(camName) {
+            alert(`正在為您下載或開啟 ${camName} 的 PDF 規格書 (模擬規格下載)...`);
+        }
+
+
+        let activeTooltip = null;
+        let activeCell = null;
+
+        // 動態修正 hover-spec-tooltip 顯示位置，避免超出畫面且確保在最上層
+        document.addEventListener('mouseover', function (e) {
+            if (window.innerWidth <= 600) return; // 手機版交給 CSS fixed 定位
+
+            const cell = e.target.closest('.cam-model-cell');
+
+            // 如果滑鼠移出原 cell
+            if (activeCell && activeCell !== cell) {
+                // 檢查是否移到了 activeTooltip 內部，或是移到了 cell 內的其他子元素
+                const toElement = e.relatedTarget;
+                if (!toElement || (!activeCell.contains(toElement) && !activeTooltip.contains(toElement))) {
+                    hideActiveTooltip();
+                }
+            }
+
+            if (!cell) return;
+            if (activeCell === cell) return; // 已經在顯示該 cell 的 tooltip
+
+            // 尋找 cell 內部的 tooltip 模板
+            const tooltip = cell.querySelector('.hover-spec-tooltip');
+            if (!tooltip) return;
+
+            hideActiveTooltip(); // 先隱藏前一個
+
+            activeCell = cell;
+            activeTooltip = tooltip;
+
+            // 移至 body 最上層
+            document.body.appendChild(tooltip);
+            tooltip.style.display = 'block';
+            tooltip.style.position = 'fixed';
+            tooltip.style.zIndex = '99999';
+            tooltip.style.pointerEvents = 'auto';
+
+            // 觸發重繪以使 transition 動畫生效
+            tooltip.offsetHeight;
+            tooltip.style.opacity = '1';
+
+            // 計算並設定位置
+            positionTooltip(cell, tooltip);
+        });
+
+        document.addEventListener('mouseout', function (e) {
+            if (window.innerWidth <= 600) return;
+            if (!activeCell || !activeTooltip) return;
+
+            const toElement = e.relatedTarget;
+            // 如果移出的目標仍然在 cell 內部，或是在 tooltip 內部，就不隱藏
+            if (toElement && (activeCell.contains(toElement) || activeTooltip.contains(toElement))) {
+                return;
+            }
+
+            hideActiveTooltip();
+        });
+
+        // 監聽滾動以防 tooltip 殘留或位移
+        window.addEventListener('scroll', function () {
+            hideActiveTooltip();
+        }, { passive: true });
+
+        function hideActiveTooltip() {
+            if (activeTooltip && activeCell) {
+                activeTooltip.style.display = 'none';
+                activeTooltip.style.opacity = '0';
+                activeTooltip.style.pointerEvents = 'none';
+                activeCell.appendChild(activeTooltip); // 放回原位置
+            }
+            activeTooltip = null;
+            activeCell = null;
+        }
+
+        function positionTooltip(cell, tooltip) {
+            const cellRect = cell.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // 預設在 cell 右側，垂直置中
+            let left = cellRect.right + 10;
+            let top = cellRect.top + (cellRect.height - tooltipRect.height) / 2;
+
+            // 重置箭頭變數
+            tooltip.style.setProperty('--arrow-top', '50%');
+            tooltip.style.setProperty('--arrow-left', 'auto');
+            tooltip.style.setProperty('--arrow-right', '100%');
+            tooltip.style.setProperty('--arrow-transform', 'translateY(-50%)');
+            tooltip.style.setProperty('--arrow-border-color', 'transparent #ffffff transparent transparent');
+
+            // 1. 檢查左右是否超出畫面，若右側超出則翻轉至左側顯示
+            if (left + tooltipRect.width > viewportWidth - 10) {
+                left = cellRect.left - tooltipRect.width - 10;
+                tooltip.style.setProperty('--arrow-left', '100%');
+                tooltip.style.setProperty('--arrow-right', 'auto');
+                tooltip.style.setProperty('--arrow-border-color', 'transparent transparent transparent #ffffff');
+            }
+
+            if (left < 10) {
+                left = 10;
+            }
+
+            // 2. 檢查上下是否超出畫面並垂直微調
+            let shiftY = 0;
+            if (top < 10) {
+                shiftY = 10 - top;
+                top = 10;
+            } else if (top + tooltipRect.height > viewportHeight - 10) {
+                shiftY = (viewportHeight - 10) - (top + tooltipRect.height);
+                top = viewportHeight - 10 - tooltipRect.height;
+            }
+
+            if (shiftY !== 0) {
+                const cellCenterRelative = (cellRect.top + cellRect.height / 2) - top;
+                tooltip.style.setProperty('--arrow-top', `${cellCenterRelative}px`);
+            }
+
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${top}px`;
+            tooltip.style.transform = 'none';
+        }
+
+        // 注意：初始化已由上方的 window.onload 統一處理，此處不再重複宣告。
+
+        // 修正 Tooltiptext 顯示位置，避免超出畫面
+        const tooltipIcons = document.querySelectorAll('.tooltip');
+        tooltipIcons.forEach(tooltip => {
+            tooltip.addEventListener('mouseenter', () => {
+                const tooltiptext = tooltip.querySelector('.tooltiptext');
+                if (!tooltiptext) return;
+
+                // 重置為預設樣式以便重新計算基準位置
+                tooltiptext.style.left = '50%';
+                tooltiptext.style.marginLeft = '-110px';
+                tooltiptext.style.bottom = '150%';
+                tooltiptext.style.top = 'auto';
+                tooltiptext.style.setProperty('--arrow-left', '50%');
+                tooltiptext.classList.remove('tooltip-bottom');
+
+                const rect = tooltiptext.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+
+                // 1. 檢查左右是否超出畫面
+                let offset = 0;
+                if (rect.left < 10) {
+                    offset = 10 - rect.left;
+                } else if (rect.right > viewportWidth - 10) {
+                    offset = (viewportWidth - 10) - rect.right;
+                }
+
+                if (offset !== 0) {
+                    tooltiptext.style.left = `calc(50% + ${offset}px)`;
+                    tooltiptext.style.setProperty('--arrow-left', `calc(50% - ${offset}px)`);
+                }
+
+                // 2. 檢查上下是否超出畫面
+                const updatedRect = tooltiptext.getBoundingClientRect();
+                if (updatedRect.top < 10) {
+                    // 向上超出畫面，改為在下方顯示
+                    tooltiptext.style.bottom = 'auto';
+                    tooltiptext.style.top = '150%';
+                    tooltiptext.classList.add('tooltip-bottom');
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
